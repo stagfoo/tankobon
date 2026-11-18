@@ -1,0 +1,32 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- Manga folders on the SD card aren't media files, so reading them takes All files
+         access on Android 11+ (`appops set com.tankobon.app MANAGE_EXTERNAL_STORAGE allow`). -->
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
+        tools:ignore="ScopedStorage" />
+
+    <!-- Reading progress goes to Next Up. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <application
+        android:label="Tankobon"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher"
+        android:theme="@android:style/Theme.Material.Light.NoActionBar"
+        android:allowBackup="false"
+        android:supportsRtl="true">
+
+        <!-- Held like a book: the big screen is portrait, either way up (the sensor decides). -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:screenOrientation="sensorPortrait"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|keyboard|navigation">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>
