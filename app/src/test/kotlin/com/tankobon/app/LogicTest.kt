@@ -27,6 +27,16 @@ class LogicTest {
         assertEquals(90, Logic.controlsRotation(0, 1, true))
     }
 
+    @Test fun holdingPicksRotation() {
+        assertEquals(0, Logic.rotationFor(5, 1))      // upright: book-style, small screen on the left
+        assertEquals(1, Logic.rotationFor(268, 0))    // right side up: clamshell landscape
+        assertEquals(2, Logic.rotationFor(183, 0))    // book-style the other way round
+        assertEquals(3, Logic.rotationFor(90, 0))
+        assertEquals(0, Logic.rotationFor(-1, 0))     // flat on the table: keep what we had
+        assertEquals(2, Logic.rotationFor(45, 2))     // diagonal: keep what we had
+        assertEquals(0, Logic.rotationFor(355, 1))
+    }
+
     @Test fun padFollowsThePicture() {
         // Clamshell: the pad means what it says.
         assertEquals(Logic.Dir.LEFT, Logic.onScreen(KeyEvent.KEYCODE_DPAD_LEFT, 1))

@@ -21,6 +21,7 @@ import android.view.GestureDetector
 import android.view.Gravity
 import android.view.KeyEvent
 import android.view.MotionEvent
+import android.view.OrientationEventListener
 import android.view.View
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
@@ -64,6 +65,13 @@ class MainActivity : Activity() {
     private val pages = LruCache<String, Bitmap>(6)
 
     private lateinit var big: FrameLayout        // what the big screen shows
+    private lateinit var root: Turned            // turns it to the way the Thor is held
+    /**
+     * The rotation the big screen should have for the way the Thor is held. The Thor's system
+     * keeps its screens fixed in landscape and ignores apps asking for portrait, so Tankobon
+     * turns its own picture: by the difference between this and the display's real rotation.
+     */
+    private var held = 0
     private lateinit var pageView: ImageView
     private var controls: Presentation? = null
     private var embedded: Turned? = null          // controls under the page when there's no second screen
@@ -79,13 +87,18 @@ class MainActivity : Activity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         big = FrameLayout(this)
         pageView = ImageView(this).apply { scaleType = ImageView.ScaleType.FIT_CENTER }
-        setContentView(big)
+        root = Turned(this).apply { addView(big) }
+        setContentView(root)
+        // Book-style (small screen on the left) until the sensor says otherwise.
+        held = prefs.getInt("held", 0)
+        turnPicture()
         immersive(window)
         getSystemService(DisplayManager::class.java).registerDisplayListener(displays, main)
     }
 
     override fun onResume() {
         super.onResume()
+        if (tilt.canDetectOrientation()) tilt.enable()
         showControls()
         if (!Environment.isExternalStorageManager()) { askForFiles(); return }
         if (mode == Mode.READER && book != null) showReader() else rescan()
@@ -93,6 +106,7 @@ class MainActivity : Activity() {
 
     override fun onPause() {
         super.onPause()
+        tilt.disable()
         controls?.dismiss(); controls = null
         val lib = library
         Thread { progress.push(lib) }.start()
@@ -107,7 +121,7 @@ class MainActivity : Activity() {
 
     override fun onConfigurationChanged(c: Configuration) {
         super.onConfigurationChanged(c)
-        turnControls()
+        turnPicture()
         if (mode == Mode.READER) showPage() else showShelf()
     }
 
@@ -116,7 +130,7 @@ class MainActivity : Activity() {
     private val displays = object : DisplayManager.DisplayListener {
         override fun onDisplayAdded(id: Int) { if (controls == null && embedded == null) showControls() }
         override fun onDisplayRemoved(id: Int) { if (controls?.display?.displayId == id) { controls?.dismiss(); controls = null; showControls() } }
-        override fun onDisplayChanged(id: Int) { turnControls() }
+        override fun onDisplayChanged(id: Int) { turnPicture() }
     }
 
     private fun secondScreen(): Display? {
@@ -149,10 +163,23 @@ class MainActivity : Activity() {
         renderControls()
     }
 
+    private val tilt by lazy {
+        object : OrientationEventListener(this) {
+            override fun onOrientationChanged(o: Int) {
+                val r = Logic.rotationFor(o, held)
+                if (r != held) { held = r; prefs.edit().putInt("held", r).apply(); turnPicture() }
+            }
+        }
+    }
+
+    private fun turnPicture() {
+        root.degrees = Logic.controlsRotation(held, display?.rotation ?: 0, false)
+        turnControls()
+    }
+
     private fun turnControls() {
         val c = controls ?: return
-        val bigRot = display?.rotation ?: 0
-        turned?.degrees = Logic.controlsRotation(bigRot, c.display.rotation, prefs.getBoolean("flip", false))
+        turned?.degrees = Logic.controlsRotation(held, c.display.rotation, prefs.getBoolean("flip", false))
     }
 
     /** Views for the controls screen are made with its own context (its own display). */
@@ -173,7 +200,9 @@ class MainActivity : Activity() {
         val col = LinearLayout(cctx).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(Ui.dp(cctx, 14), Ui.dp(cctx, 12), Ui.dp(cctx, 14), Ui.dp(cctx, 12))
-            views.forEach { addView(it, Ui.lp()) }
+            // Keep a view's own size if it has one: a plain spacer told to wrap its content
+            // fills the whole screen instead.
+            views.forEach { addView(it, it.layoutParams as? LinearLayout.LayoutParams ?: Ui.lp()) }
         }
         return FrameLayout(cctx).apply { background = Ui.paper(cctx); addView(col, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT)) }
     }
@@ -464,7 +493,7 @@ class MainActivity : Activity() {
     override fun dispatchKeyEvent(e: KeyEvent): Boolean {
         if (e.action != KeyEvent.ACTION_DOWN) return super.dispatchKeyEvent(e)
         val k = e.keyCode
-        val rot = display?.rotation ?: 0
+        val rot = held
         if (k == KeyEvent.KEYCODE_BACK || k == KeyEvent.KEYCODE_BUTTON_SELECT) {
             if (mode == Mode.READER) { closeBook(); return true }
             return super.dispatchKeyEvent(e)

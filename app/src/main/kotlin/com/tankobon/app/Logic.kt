@@ -53,6 +53,19 @@ object Logic {
         return if (d == 270) -90 else d
     }
 
+    /**
+     * The display rotation the way the device is being held, from an OrientationEventListener
+     * reading (0 upright, 90 left side up, 180 upside down, 270 right side up). Readings near a
+     * diagonal, or flat on a table (-1), keep [current] so the picture doesn't flap about.
+     */
+    fun rotationFor(orientation: Int, current: Int): Int {
+        if (orientation < 0) return current
+        val nearest = ((orientation + 45) / 90) % 4
+        val off = Math.abs(orientation - nearest * 90).let { minOf(it, 360 - it) }
+        if (off > 30) return current
+        return (4 - nearest) % 4
+    }
+
     enum class Dir { UP, RIGHT, DOWN, LEFT }
 
     /**
