@@ -32,6 +32,19 @@ Manga/
 `.cbz`/`.zip` and folders of JPEG, PNG, WebP or AVIF are read. Chapters sort naturally
 (2 before 10, 2.5 after 2).
 
+## Settings and the reading log
+
+**Settings** (on the small screen, from the bookshelf or while reading): page order, tap-to-turn,
+locking the picture so it stops turning with the Thor, flipping the small screen, sending progress
+to Next Up now, and looking for new manga.
+
+Progress is also kept where you can get at it, in `Documents/Tankobon/` on internal storage:
+
+- `reading-log.csv` — one line per sitting with a chapter (pages from–to, minutes) and per
+  finished chapter. Opens in any spreadsheet.
+- `progress.json` — where every series is up to and which chapters are read. If the app is
+  reinstalled, it picks its progress back up from here.
+
 ## Install
 
 Add this repo to [Obtainium](https://github.com/ImranR98/Obtainium) (`https://github.com/stagfoo/tankobon`),

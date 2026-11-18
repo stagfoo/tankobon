@@ -77,6 +77,12 @@ class MainActivity : Activity() {
     private var embedded: Turned? = null          // controls under the page when there's no second screen
     private var turned: Turned? = null            // whichever of the two is live
 
+    private var settings = false                  // the small screen shows settings instead of controls
+
+    // The current sitting with one chapter, for the reading log.
+    private var sitStart = 0L
+    private var sitFrom = 0
+
     private val prefs get() = progress.prefs
     private val rightToLeft get() = prefs.getBoolean("rtl", true)
 
@@ -101,11 +107,12 @@ class MainActivity : Activity() {
         if (tilt.canDetectOrientation()) tilt.enable()
         showControls()
         if (!Environment.isExternalStorageManager()) { askForFiles(); return }
-        if (mode == Mode.READER && book != null) showReader() else rescan()
+        if (mode == Mode.READER && book != null) { startSitting(); showReader() } else rescan()
     }
 
     override fun onPause() {
         super.onPause()
+        endSitting()
         tilt.disable()
         controls?.dismiss(); controls = null
         val lib = library
@@ -166,6 +173,7 @@ class MainActivity : Activity() {
     private val tilt by lazy {
         object : OrientationEventListener(this) {
             override fun onOrientationChanged(o: Int) {
+                if (prefs.getBoolean("lockTurn", false)) return
                 val r = Logic.rotationFor(o, held)
                 if (r != held) { held = r; prefs.edit().putInt("held", r).apply(); turnPicture() }
             }
@@ -189,6 +197,7 @@ class MainActivity : Activity() {
         val t = turned ?: return
         val panel = when {
             !Environment.isExternalStorageManager() -> panel(Ui.band(cctx, "Tankobon", "Waiting for file access"))
+            settings -> settingsControls()
             mode == Mode.READER -> readerControls()
             else -> shelfControls()
         }
@@ -235,7 +244,10 @@ class MainActivity : Activity() {
         val col = panel(
             Ui.band(cctx, s.title, "${s.chapters.size} chapter${if (s.chapters.size == 1) "" else "s"} · $read read"),
             Ui.gap(cctx, 10), go, Ui.gap(cctx, 10))
-        ((col as FrameLayout).getChildAt(0) as LinearLayout).addView(scroll, Ui.lp(h = 0, weight = 1f))
+        val inner = (col as FrameLayout).getChildAt(0) as LinearLayout
+        inner.addView(scroll, Ui.lp(h = 0, weight = 1f))
+        inner.addView(Ui.gap(cctx, 10))
+        inner.addView(Ui.button(cctx, "Settings", size = 16f) { openSettings() }, Ui.lp())
         return col
     }
 
@@ -274,10 +286,83 @@ class MainActivity : Activity() {
                 Ui.button(cctx, if (rightToLeft) "Read: right→left" else "Read: left→right", size = 15f) {
                     prefs.edit().putBoolean("rtl", !rightToLeft).apply(); renderControls()
                 },
-                Ui.button(cctx, "Flip this screen", size = 15f) {
-                    prefs.edit().putBoolean("flip", !prefs.getBoolean("flip", false)).apply(); turnControls()
-                }),
+                Ui.button(cctx, "Settings", size = 15f) { openSettings() }),
         )
+    }
+
+    private fun startSitting() { sitStart = System.currentTimeMillis(); sitFrom = page }
+
+    /** Log the sitting with the open chapter, if anything happened in it. */
+    private fun endSitting() {
+        val s = series; val b = book
+        if (sitStart == 0L || s == null || b == null || mode != Mode.READER) { sitStart = 0L; return }
+        val minutes = ((System.currentTimeMillis() - sitStart) / 60_000).toInt()
+        if (page != sitFrom || minutes > 0) {
+            val ch = s.chapters[chapterIndex]; val from = sitFrom; val to = page; val n = b.pages.size
+            io.execute { progress.log("read", s, ch, from, to, n, minutes) }
+        }
+        sitStart = 0L
+    }
+
+    // ---- settings (small screen) ---------------------------------------------------------
+
+    private fun openSettings() { settings = true; renderControls() }
+
+    private fun setting(label: String, value: String, onClick: () -> Unit): View =
+        Ui.row(cctx, 10, Ui.text(cctx, label, 16f, Ui.INK, bold = true), Ui.button(cctx, value, size = 15f, onClick = onClick))
+
+    private fun toggle(key: String, default: Boolean) { prefs.edit().putBoolean(key, !prefs.getBoolean(key, default)).apply() }
+
+    private fun settingsControls(): View {
+        val c = cctx
+        val list = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
+        fun add(v: View) { list.addView(v, Ui.lp()); list.addView(Ui.gap(c, 8)) }
+        fun heading(t: String) { list.addView(Ui.text(c, t, 14f, Ui.SOFT, bold = true).apply { setPadding(0, Ui.dp(c, 10), 0, Ui.dp(c, 4)) }, Ui.lp()) }
+
+        heading("READING")
+        add(setting("Page order", if (rightToLeft) "Right → left (manga)" else "Left → right") { toggle("rtl", true); renderControls() })
+        add(setting("Tap page sides to turn", if (prefs.getBoolean("taps", true)) "On" else "Off (swipe only)") { toggle("taps", true); renderControls() })
+
+        heading("SCREENS")
+        add(setting("Turn with the Thor", if (prefs.getBoolean("lockTurn", false)) "Locked as it is now" else "On") { toggle("lockTurn", false); renderControls() })
+        add(setting("This screen", if (prefs.getBoolean("flip", false)) "Flipped" else "Normal") { toggle("flip", false); turnControls(); renderControls() })
+
+        heading("NEXT UP")
+        val hasKey = prefs.getString("key", "").orEmpty().isNotBlank()
+        val status = Ui.text(c, if (!hasKey) "No key set, so progress stays on the Thor." else "Last: " + prefs.getString("sent", "nothing sent yet"), 15f, Ui.SOFT)
+        add(status)
+        if (hasKey) add(Ui.button(c, "Send progress now", Ui.Kind.BLUE, 16f) {
+            status.text = "Sending…"
+            val lib = library
+            Thread { val r = progress.push(lib, force = true); main.post { status.text = "Last: " + prefs.getString("sent", r) } }.start()
+        })
+
+        heading("READING LOG")
+        add(Ui.text(c, "Saved on the Thor in Documents/Tankobon: reading-log.csv (every sitting and finished chapter) and progress.json (where each series is up to).", 15f))
+        val recent = progress.recent(6)
+        add(Ui.text(c, if (recent.isEmpty()) "Nothing logged yet." else recent.joinToString("\n") { pretty(it) }, 14f, Ui.INK).apply {
+            typeface = android.graphics.Typeface.MONOSPACE
+        })
+
+        heading("LIBRARY")
+        add(Ui.button(c, "Look for new manga", size = 16f) { settings = false; if (mode == Mode.READER) closeBook(); rescan() })
+
+        val scroll = ScrollView(c).apply { addView(list); isVerticalScrollBarEnabled = true }
+        val col = panel(Ui.band(c, "Settings"), Ui.gap(c, 6))
+        val inner = (col as FrameLayout).getChildAt(0) as LinearLayout
+        inner.addView(scroll, Ui.lp(h = 0, weight = 1f))
+        inner.addView(Ui.gap(c, 10))
+        inner.addView(Ui.button(c, "Done", Ui.Kind.ORANGE, 18f) { settings = false; renderControls() }, Ui.lp())
+        return col
+    }
+
+    /** A log line, shortened for the small screen: "11-19 21:04  Pluto v02  p.6→24  12 min". */
+    private fun pretty(line: String): String {
+        val f = Regex("""(?:^|,)("(?:[^"]|"")*"|[^,]*)""").findAll(line).map { it.groupValues[1].trim('"').replace("\"\"", "\"") }.toList()
+        if (f.size < 8) return line
+        val time = f[0].drop(5)
+        return if (f[1] == "finished") "$time  ${f[3]}  finished"
+        else "$time  ${f[3]}  p.${f[4]}→${f[5]}  ${f[7]} min"
     }
 
     // ---- the big screen: bookshelf -------------------------------------------------------
@@ -390,11 +475,13 @@ class MainActivity : Activity() {
 
     private fun open(s: Series, chapter: Int, atPage: Int) {
         if (series !== s || chapterIndex != chapter || book == null) {
+            endSitting()
             book?.close(); book = null; pages.evictAll()
             series = s; chapterIndex = chapter
             book = try { Book(s.chapters[chapter]) } catch (e: Exception) { null }
         }
         page = atPage.coerceIn(0, ((book?.pages?.size ?: 1) - 1).coerceAtLeast(0))
+        if (sitStart == 0L) startSitting()
         mode = Mode.READER
         showReader()
     }
@@ -403,6 +490,7 @@ class MainActivity : Activity() {
         GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
             override fun onDown(e: MotionEvent) = true
             override fun onSingleTapUp(e: MotionEvent): Boolean {
+                if (!prefs.getBoolean("taps", true)) return true
                 val third = big.width / 3f
                 when {
                     e.x < third -> turn(if (rightToLeft) 1 else -1)
@@ -481,6 +569,7 @@ class MainActivity : Activity() {
     }
 
     private fun closeBook() {
+        endSitting()
         mode = Mode.SHELF
         big.setOnTouchListener(null)
         val lib = library
@@ -495,6 +584,7 @@ class MainActivity : Activity() {
         val k = e.keyCode
         val rot = held
         if (k == KeyEvent.KEYCODE_BACK || k == KeyEvent.KEYCODE_BUTTON_SELECT) {
+            if (settings) { settings = false; renderControls(); return true }
             if (mode == Mode.READER) { closeBook(); return true }
             return super.dispatchKeyEvent(e)
         }
