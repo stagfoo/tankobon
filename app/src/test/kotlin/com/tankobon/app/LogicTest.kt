@@ -2,6 +2,8 @@ package com.tankobon.app
 
 import android.view.KeyEvent
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class LogicTest {
@@ -25,6 +27,22 @@ class LogicTest {
         assertEquals(-90, Logic.controlsRotation(0, 1, false))
         assertEquals(90, Logic.controlsRotation(2, 1, false))
         assertEquals(90, Logic.controlsRotation(0, 1, true))
+    }
+
+    @Test fun volumesBeforeLooseChapters() {
+        val files = listOf("Tower Dungeon c012 (2024) (Digital) (Aquila).cbz", "Tower Dungeon v02 (2025) (Digital) (lft-DCP).cbz",
+            "Tower Dungeon c011 (2024) (Digital) (JDS).cbz", "Tower Dungeon v01 (2025) (Digital) (lft-DCP).cbz")
+        assertEquals(listOf("Tower Dungeon v01 (2025) (Digital) (lft-DCP).cbz", "Tower Dungeon v02 (2025) (Digital) (lft-DCP).cbz",
+            "Tower Dungeon c011 (2024) (Digital) (JDS).cbz", "Tower Dungeon c012 (2024) (Digital) (Aquila).cbz"), files.sortedWith(Logic.reading))
+        // Only chapters, or names that just happen to start with v/c: plain natural order.
+        assertEquals(listOf("Chapter 2", "Chapter 10"), listOf("Chapter 10", "Chapter 2").sortedWith(Logic.reading))
+        assertEquals(listOf("Vinland 2", "Vinland 10"), listOf("Vinland 10", "Vinland 2").sortedWith(Logic.reading))
+        assertTrue(Logic.isVolume("Witch Hat Atelier v01 (2019) (Digital) (F) (danke-Empire).cbz"))
+        assertTrue(Logic.isVolume("Berserk Vol. 3.cbz"))
+        assertFalse(Logic.isVolume("Tower Dungeon c011 (2024) (Digital) (JDS).cbz"))
+        assertFalse(Logic.isVolume("Vinland 2.cbz"))
+        assertEquals(listOf("Pluto - Urasawa x Tezuka v01", "Pluto - Urasawa x Tezuka v02"),
+            listOf("Pluto - Urasawa x Tezuka v02", "Pluto - Urasawa x Tezuka v01").sortedWith(Logic.reading))
     }
 
     @Test fun holdingPicksRotation() {

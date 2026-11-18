@@ -55,7 +55,7 @@ object Library {
         // Images straight in the series folder: one chapter.
         if (files.any { it.isFile && Logic.isImage(it.name) }) chapters += Chapter(dir.name, dir.path)
         if (chapters.isEmpty()) return null
-        return Series(dir.name, dir.path, chapters.sortedWith(compareBy(Logic.natural) { it.name }))
+        return Series(dir.name, dir.path, chapters.sortedWith(compareBy(Logic.reading) { it.name }))
     }
 }
 

@@ -34,6 +34,22 @@ object Logic {
         (x.length - i) - (y.length - j)
     }
 
+    private val VOLUME = Regex("""(?i)(?:^|[\s_.-])(?:v|vol\.?|volume)\s*\d""")
+    private val CHAPTER = Regex("""(?i)(?:^|[\s_.-])(?:c|ch\.?|chap|chapter)\s*\d""")
+
+    /**
+     * Order of a series' files. Volumes come before loose chapters: a series kept as
+     * "v01-v03" plus newer "c011, c012…" not yet collected reads the volumes first, where plain
+     * name order would put "c" before "v". Otherwise natural order.
+     */
+    val reading: Comparator<String> = compareBy<String> { if (isVolume(it)) 0 else 1 }.then(natural)
+
+    /** "Pluto v02 (2009) (Digital).cbz" is a whole volume; "Tower Dungeon c011" and "Chapter 5" aren't. */
+    fun isVolume(name: String): Boolean {
+        val n = bare(name).replace(Regex("""\[[^\]]*]|\([^)]*\)"""), " ")
+        return VOLUME.containsMatchIn(n) && !CHAPTER.containsMatchIn(n)
+    }
+
     /** "[Group] Chainsaw Man (Digital) v01.cbz" -> "Chainsaw Man v01"; folder and file names to show. */
     fun clean(name: String): String = name
         .let { if (isArchive(it)) it.substringBeforeLast('.') else it }

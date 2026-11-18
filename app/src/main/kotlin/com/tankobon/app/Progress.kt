@@ -74,8 +74,13 @@ class Progress(private val ctx: Context) {
                 val s = byName[name]
                 val total = s?.chapters?.size ?: 0
                 val done = s?.chapters?.count { it.name in m.read } ?: m.read.size
-                items.put(JSONObject().put("title", s?.title ?: Logic.clean(name))
-                    .put("chapters_read", done)
+                // Volumes and loose chapters counted apart, so Next Up says "3 vols + 2 ch".
+                val files = s?.chapters?.map { it.name } ?: m.read.toList()
+                val (vols, chs) = files.partition(Logic::isVolume)
+                val item = JSONObject().put("title", s?.title ?: Logic.clean(name))
+                if (vols.isNotEmpty()) item.put("volumes_read", vols.count { it in m.read })
+                if (chs.isNotEmpty() || vols.isEmpty()) item.put("chapters_read", chs.count { it in m.read })
+                items.put(item
                     .put("status", if (total > 0 && done >= total) "completed" else if (System.currentTimeMillis() - m.last < 30L * 86_400_000L) "active" else "paused")
                     .put("last_read", java.time.Instant.ofEpochMilli(m.last).toString()))
             }
