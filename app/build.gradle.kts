@@ -18,8 +18,8 @@ android {
         applicationId = "com.tankobon.app"
         minSdk = 30 // All files access (MANAGE_EXTERNAL_STORAGE) arrived in Android 11.
         targetSdk = 36
-        versionCode = 4
-        versionName = "1.0.3"
+        versionCode = 5
+        versionName = "1.0.4"
         buildConfigField("String", "NEXT_UP_URL", "\"${nextUp.getProperty("url", "")}\"")
     }
 
